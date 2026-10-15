@@ -268,7 +268,7 @@ test('Containerfile keeps the rootless Podman runtime minimal and fail-closed', 
     // server.js requires lib/updater.js; the image still has no .git, so it reports updates as unavailable.
     'COPY --chown=1000:1000 lib/pow.js lib/updater.js ./lib/',
     'COPY --chown=1000:1000 scripts/lib/tui-menu.js ./scripts/lib/tui-menu.js',
-    'COPY --chown=1000:1000 public/dashboard/index.html public/dashboard/*.css public/dashboard/*.js public/dashboard/*.png public/dashboard/*.jpg public/dashboard/*.mp4 ./public/dashboard/',
+    'COPY --chown=1000:1000 public/dashboard/index.html public/dashboard/*.css public/dashboard/*.js public/dashboard/*.png public/dashboard/*.jpg public/dashboard/*.woff2 public/dashboard/GEIST-LICENSE.txt ./public/dashboard/',
   ]);
   assert.doesNotMatch(containerfile, /^\s*(?:COPY|ADD)\s+\.\s/m);
   assert.match(containerfile, /^USER 1000:1000$/m);
@@ -322,7 +322,8 @@ test('the files the Containerfile copies are enough to load the server and the d
   const assets = [...index.matchAll(/(?:src|href)="\/dashboard\/([^"]+)"/g)].map(m => m[1]);
   assert.ok(assets.length > 1);
   for (const asset of assets) assert.ok(fs.existsSync(path.join(image, 'public/dashboard', asset)), `image lacks /dashboard/${asset}`);
-  assert.deepEqual(fs.readdirSync(path.join(image, 'public/dashboard')).filter(f => !/\.(?:js|css|html|png|jpg|mp4)$/.test(f)), [], 'only static assets ship');
+  // The fonts ship with their license, as SIL OFL 1.1 requires; nothing else that is not a static asset.
+  assert.deepEqual(fs.readdirSync(path.join(image, 'public/dashboard')).filter(f => !/\.(?:js|css|html|png|jpg|woff2)$/.test(f) && f !== 'GEIST-LICENSE.txt'), [], 'only static assets ship');
 });
 
 test('loopback host detection covers supported local bind addresses', () => {
@@ -1666,8 +1667,8 @@ test('dashboardUrl points a browser at a reachable loopback address', () => {
 
 test('dashboardEntry serves photos and video but never docs or paths outside the folder', () => {
   const { dashboardEntry } = serverInternals;
-  assert.deepEqual(dashboardEntry('/dashboard/media-liftoff.mp4'), { file: 'media-liftoff.mp4', type: 'video/mp4', optional: true, media: true });
-  assert.equal(dashboardEntry('/dashboard/media-horizon.jpg').type, 'image/jpeg');
+  assert.deepEqual(dashboardEntry('/dashboard/media-clip.mp4'), { file: 'media-clip.mp4', type: 'video/mp4', optional: true, media: true });
+  assert.equal(dashboardEntry('/dashboard/media-night-launch.jpg').type, 'image/jpeg');
   assert.equal(dashboardEntry('/dashboard/logo.png').type, 'image/png');
   assert.ok(!dashboardEntry('/dashboard/app.css').media);
   assert.ok(!dashboardEntry('/dashboard/core.js').media);
@@ -1678,6 +1679,33 @@ test('dashboardEntry serves photos and video but never docs or paths outside the
   assert.equal(dashboardEntry('/dashboard/x.jpeg'), null);
 });
 
+test('dashboard ships Geist: the woff2 fonts are served and the CSP lets only this proxy supply fonts', async () => {
+  const { dashboardEntry, serveDashboard } = serverInternals;
+  for (const name of ['geist', 'geist-mono']) {
+    assert.deepEqual(dashboardEntry(`/dashboard/${name}.woff2`), { file: `${name}.woff2`, type: 'font/woff2', optional: true, media: true });
+    const bytes = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard', `${name}.woff2`));
+    assert.equal(bytes.subarray(0, 4).toString('latin1'), 'wOF2', `${name}.woff2 must be a WOFF2 file`);
+  }
+  const res = { status: 0, headers: {}, body: null, writeHead(status, headers) { this.status = status; this.headers = headers || {}; }, end(body) { this.body = body; } };
+  await serveDashboard({ headers: { 'sec-fetch-dest': 'document' } }, res, '/dashboard');
+  assert.equal(res.status, 200);
+  const csp = String(res.headers['Content-Security-Policy']);
+  assert.match(csp, /(^|;\s*)font-src 'self'(;|$)/);
+  assert.match(csp, /default-src 'none'/);
+});
+
+test('dashboard type: the interface is set in Geist, the two headline faces stay', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard', 'app.css'), 'utf8');
+  const token = (name) => (css.match(new RegExp(`--${name}:\\s*([^;]+);`)) || [])[1] || '';
+  assert.match(token('font-ui'), /^"Geist",/);
+  assert.match(token('font-mono'), /^"Geist Mono",/);
+  assert.match(token('font-display'), /^"Mission",/, 'the big settings headlines keep the DIN face');
+  assert.match(css, /\.chat-empty-title \{[^}]*font-family: ui-serif/, 'the empty-chat greeting keeps its serif');
+  for (const [family, file] of [['Geist', 'geist.woff2'], ['Geist Mono', 'geist-mono.woff2']]) {
+    assert.match(css, new RegExp(`@font-face \\{[^}]*font-family: "${family}";[^}]*url\\("/dashboard/${file}"\\) format\\("woff2"\\)`), `${family} comes from /dashboard/${file}`);
+  }
+});
+
 test('dashboard photos and video are not served when opened directly as a page', async () => {
   const { serveDashboard } = serverInternals;
   const call = async (pathname, dest) => {
@@ -1685,19 +1713,19 @@ test('dashboard photos and video are not served when opened directly as a page',
     await serveDashboard({ headers: dest ? { 'sec-fetch-dest': dest } : {} }, res, pathname);
     return res;
   };
-  for (const pathname of ['/dashboard/media-horizon.jpg', '/dashboard/media-liftoff.mp4', '/dashboard/logo.png']) {
+  for (const pathname of ['/dashboard/media-night-launch.jpg', '/dashboard/geist.woff2', '/dashboard/logo.png']) {
     for (const dest of ['document', 'iframe', 'embed', 'object']) {
       const res = await call(pathname, dest);
       assert.equal(res.status, 403, `${pathname} as ${dest}`);
       assert.match(String(res.body), /media_direct_open/);
     }
   }
-  const image = await call('/dashboard/media-horizon.jpg', 'image');
+  const image = await call('/dashboard/media-night-launch.jpg', 'image');
   assert.equal(image.status, 200);
   // Without this, the browser reuses the cached image for a direct open and never asks.
   assert.match(String(image.headers.Vary), /Sec-Fetch-Dest/);
-  assert.equal((await call('/dashboard/media-liftoff.mp4', 'video')).status, 200);
-  assert.equal((await call('/dashboard/media-horizon.jpg')).status, 200, 'clients without Fetch Metadata still get the file');
+  assert.equal((await call('/dashboard/geist.woff2', 'font')).status, 200);
+  assert.equal((await call('/dashboard/media-night-launch.jpg')).status, 200, 'clients without Fetch Metadata still get the file');
   assert.equal((await call('/dashboard', 'document')).status, 200, 'the page itself still opens');
 });
 

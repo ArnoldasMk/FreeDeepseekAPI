@@ -10,6 +10,7 @@
   <title>FreeDeepseekAPI</title>
   <link rel="stylesheet" href="/dashboard/app.css">
   <script src="/dashboard/core.js" defer></script>
+  <script src="/dashboard/glyphfield.js" defer></script>
   <script src="/dashboard/charts.js" defer></script>
   <script src="/dashboard/markdown.js" defer></script>
   <script src="/dashboard/status.js" defer></script>
@@ -36,6 +37,7 @@
     <symbol id="i-attach" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.75"/><path d="M12 8v8M8 12h8"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m20.5 16-5-5-9 8.5"/></symbol>
     <symbol id="i-think" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.75"/><path d="M12 3.25v17.5M14.75 3.7v16.6M17.5 5.2v13.6"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 3 5.5 13.5H12L10.5 21l8-10.5H12Z"/></symbol>
     <symbol id="i-search-web" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.75"/><path d="M3.25 12h17.5M12 3.25c2.4 2.6 3.5 5.5 3.5 8.75S14.4 18.15 12 20.75C9.6 18.15 8.5 15.25 8.5 12S9.6 5.85 12 3.25Z"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" class="fill"/></symbol>
@@ -112,8 +114,8 @@
         <button type="button" class="icon-btn rail-toggle" id="rail-toggle" aria-label="Toggle sidebar" data-tip="Toggle sidebar"><svg class="icon" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
       </div>
       <ul class="rail-actions" role="list">
-        <li><button type="button" class="nav-item" id="new-chat" data-tip="New chat"><svg class="icon icon-nav" aria-hidden="true"><use href="#i-new-chat"/></svg><span class="rail-label">New chat</span></button></li>
-        <li><button type="button" class="nav-item" id="open-search" data-tip="Search"><svg class="icon icon-nav" aria-hidden="true"><use href="#i-search"/></svg><span class="rail-label">Search</span></button></li>
+        <li><button type="button" class="nav-item rail-search" id="open-search" data-tip="Search"><svg class="icon icon-nav" aria-hidden="true"><use href="#i-search"/></svg><span class="rail-label">Search</span></button></li>
+        <li><button type="button" class="nav-item" id="new-chat" data-tip="New chat"><svg class="icon icon-nav" aria-hidden="true"><use href="#i-plus"/></svg><span class="rail-label">New chat</span></button></li>
       </ul>
       <section class="chats" id="chats" aria-labelledby="chats-heading">
         <div class="chats-head">
@@ -136,7 +138,7 @@
           </span>
           <svg class="icon icon-sm account-chev rail-label" aria-hidden="true"><use href="#i-chevron-down"/></svg>
         </button>
-        <a class="nav-item" href="#/settings" id="open-settings" data-tip="Settings"><svg class="icon icon-nav" aria-hidden="true"><use href="#i-gear"/></svg><span class="rail-label">Settings</span></a>
+        <a class="nav-item" href="#/settings" id="open-settings" aria-label="Settings" data-tip="Settings"><svg class="icon icon-nav" aria-hidden="true"><use href="#i-gear"/></svg><span class="rail-label">Settings</span></a>
       </div>
     </nav>
 

@@ -269,8 +269,10 @@
         h('div', { class: 'composer-right' }, sendBtn)));
     const note = h('p', { class: 'composer-note', role: 'status' });
     // The note sits above the composer, where the eye already is when a send is refused.
-    const dock = h('div', { class: 'composer-dock' }, empty, note, form, meta, fileInput);
-    root.append(scroll, dock);
+    const dock = h('div', { class: 'composer-dock' }, note, form, meta, fileInput);
+    // Empty chat: greeting in the middle, composer at the bottom, the glyph field behind both.
+    root.append(scroll, empty, dock);
+    S.field = F.glyphField.attach(root, { mask: { image: '/dashboard/logo.png' }, place: 'center', fade: 'composer', when: (el) => el.classList.contains('is-empty') });
     Object.assign(S.els, { banners, empty, emptyTitle, emptyLine, unknown, transcript, scroll, textarea, thumbs, fileInput, attachBtn, modelBtn, modelName, modelMode, sendBtn, form, note, dock });
 
     // composer behaviour
@@ -316,14 +318,11 @@
     S.ro.observe(dock);
   }
 
-  // Bottom padding of the transcript follows the composer height.
+  // Bottom padding of the transcript, and the floor of the empty greeting, follow the composer height.
   function syncDockSpace() {
     if (!S.els.dock) return;
     const hgt = S.els.form.getBoundingClientRect().height + 48;
-    // The open-chat backdrop (.view-chat::before) keeps the Earth limb above the composer.
-    // Layout offsets, not rects: the composer may be mid-FLIP (transformed) when this runs.
-    S.els.dock.parentElement.style.setProperty('--dock-top', `${S.els.dock.offsetHeight - S.els.form.offsetTop}px`);
-    S.els.scroll.style.setProperty('--dock-h', `${Math.round(hgt)}px`);
+    S.root.style.setProperty('--dock-h', `${Math.round(hgt)}px`);
   }
 
   function setNote(text, tone, fromReason = false) {
@@ -337,8 +336,8 @@
   // Modes are model variants on this server: base, -thinking, and their -nosearch twins.
   // Web search is on by default; the menu has a separate switch to turn it off.
   const MODES = [
-    { think: false, title: 'Instant', desc: 'Direct answers, fastest' },
-    { think: true, title: 'DeepThink', desc: 'Reasons step by step before answering' },
+    { think: false, title: 'Instant', desc: 'Direct answers, fastest', icon: 'bolt' },
+    { think: true, title: 'DeepThink', desc: 'Reasons step by step before answering', icon: 'think' },
   ];
   const modeLabel = (think, search) => `${MODES.find(m => m.think === think).title}${search ? '' : ' · No search'}`;
   // "deepseek-v4-flash" → "V4 Flash": the id, made readable, nothing invented.
@@ -371,6 +370,7 @@
           type: 'button', role: 'menuitemradio', class: 'menu-item model-item', 'aria-checked': String(checked),
           'aria-disabled': ok ? null : 'true', 'data-tip': ok ? id : unavailableReason(id),
         },
+          F.icon(mode.icon, 'model-icon'),
           h('span', { class: 'model-text' }, h('span', { class: 'model-title', text: mode.title }), h('span', { class: 'model-desc', text: mode.desc })),
           checked ? F.icon('check', 'model-check') : null);
         b.addEventListener('click', () => { if (!ok) return; F.closePopover(); setMode(mode.think, S.search); });
@@ -383,6 +383,7 @@
         type: 'button', role: 'menuitemcheckbox', class: 'menu-item model-item', 'aria-checked': String(S.search),
         'aria-disabled': searchOk ? null : 'true', 'data-tip': searchOk ? searchId : unavailableReason(searchId),
       },
+        F.icon('search-web', 'model-icon'),
         h('span', { class: 'model-text' }, h('span', { class: 'model-title', text: 'Web search' }), h('span', { class: 'model-desc', text: 'Answers with live results from the web' })),
         S.search ? F.icon('check', 'model-check') : null);
       sw.addEventListener('click', () => { if (!searchOk) return; F.closePopover(); setMode(S.think, !S.search); });
@@ -390,6 +391,7 @@
     }
     list.append(h('div', { class: 'menu-sep', role: 'separator' }));
     const acct = h('button', { type: 'button', role: 'menuitem', class: 'menu-item model-row' },
+      F.icon('accounts', 'model-icon'),
       h('span', { class: 'model-row-label', text: 'Account' }),
       h('span', { class: 'model-row-value', text: chatAccountLabel() }),
       F.icon('chevron-right', 'model-row-chev'));
@@ -405,7 +407,7 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); btns[(i + 1) % btns.length].focus(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length].focus(); }
     });
-    F.popover(trigger, list, { width: 300, align: 'auto', role: 'presentation', label: 'Model' });
+    F.popover(trigger, list, { width: 288, align: 'auto', role: 'presentation', label: 'Model' });
   }
 
   function chatAccountLabel() {
@@ -930,28 +932,13 @@
     requestAnimationFrame(() => scrollToBottom(true));
   }
 
-  // Signature motion: the composer docks from the centre once per conversation.
+  // The first message fades the greeting and the glyph field; the composer is already in place.
   function dock() {
     const root = S.root;
     if (!root.classList.contains('is-empty')) return;
-    const { form } = S.els;
     if (F.reducedMotion()) { root.classList.remove('is-empty'); return; }
-    const first = form.getBoundingClientRect();
     root.classList.add('is-leaving');
-    setTimeout(() => {
-      const before = form.getBoundingClientRect();
-      root.classList.remove('is-empty', 'is-leaving');
-      const last = form.getBoundingClientRect();
-      // measured twice: the heading fade does not move the form, but be exact
-      const from = before.top ? before : first;
-      form.style.setProperty('transform', `translate(${from.left - last.left}px, ${from.top - last.top}px)`);
-      form.getBoundingClientRect();
-      form.classList.add('is-docking');
-      form.style.removeProperty('transform');
-      const end = () => { form.classList.remove('is-docking'); form.removeEventListener('transitionend', end); };
-      form.addEventListener('transitionend', end);
-      setTimeout(end, 700);
-    }, 150);
+    setTimeout(() => root.classList.remove('is-empty', 'is-leaving'), 150);
   }
 
   function buildMessages(conv, a) {
@@ -1182,9 +1169,18 @@
   }
 
   // ================================================================ sidebar list
+  // New chat reads as the current place while the empty chat is open, like a selected chat row.
+  function syncNewChatCurrent() {
+    const btn = document.getElementById('new-chat');
+    if (!btn) return;
+    if (S.visible && !S.activeId && !S.unknownId) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
+  }
+
   function renderList() {
     const host = document.getElementById('chat-list');
     if (!host) return;
+    syncNewChatCurrent();
     const q = S.search_q;
     const convs = Array.from(S.convs.values())
       .filter(c => !S.pendingDeletes.has(c.id))
@@ -1209,7 +1205,8 @@
     };
     host.replaceChildren(h('ul', { class: 'chat-items', role: 'list' }, convs.map(c => h('li', null,
       h('a', { class: 'chat-item', href: `#/chat/${encodeURIComponent(c.id)}`, 'aria-current': c.id === S.activeId && S.visible ? 'page' : null, title: c.title },
-        S.runs.has(c.id) ? F.lamp('busy', 'chat-busy') : null,
+        // A running answer: one glyph re-rolling, the same letters and digits as the empty-chat field.
+        S.runs.has(c.id) ? h('span', { class: 'chat-busy', role: 'img', 'aria-label': 'Answering' }) : null,
         h('span', { class: 'chat-item-title', text: c.title || 'Untitled' }),
         h('time', { class: 'chat-item-date', datetime: new Date(c.updatedAt).toISOString(), text: when(c.updatedAt) }))))));
   }
