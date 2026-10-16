@@ -31,7 +31,7 @@
     const twin = h('div', { class: 'lanes-twin', hidden: true });
     const trafficNote = h('div', { class: 'traffic-note' });
     const readouts = h('div', { class: 'readouts', role: 'group', 'aria-label': 'Traffic in this window' });
-    const errorsHead = h('div', { class: 'section-head' }, h('h3', { class: 'section-title', text: 'Recent errors' }), h('a', { class: 'link-quiet', href: '#/requests?status=error', text: 'Open Requests' }));
+    const errorsHead = h('div', { class: 'section-head' }, h('h3', { class: 'section-title' }, F.icon('alert', 'title-icon'), h('span', { class: 'section-title-text', text: 'Recent errors' })), h('a', { class: 'link-quiet', href: '#/requests?status=error', text: 'Open Requests' }));
     const errors = h('div', { class: 'recent-errors' });
     const emptyPool = h('div', { class: 'empty-pool', hidden: true });
 
@@ -45,7 +45,7 @@
       h('div', { class: 'view-pad' },
         emptyPool,
         h('section', { class: 'section', 'aria-labelledby': 'traffic-h' },
-          h('div', { class: 'section-head' }, h('h3', { class: 'section-title', id: 'traffic-h', text: 'Traffic' }), h('div', { class: 'section-controls' }, windowSeg, modeSeg)),
+          h('div', { class: 'section-head' }, h('h3', { class: 'section-title', id: 'traffic-h' }, F.icon('status', 'title-icon'), h('span', { text: 'Traffic' })), h('div', { class: 'section-controls' }, windowSeg, modeSeg)),
           trafficNote, lanes, twin),
         h('div', { class: 'rule' }),
         readouts,
@@ -58,11 +58,11 @@
     F.on('tick', () => { if (st.visible) tick(); });
   }
 
-  // The pool sentence over the status pulse set in glyphs (glyphfield.js).
+  // The pool sentence over a manta ray in a shaft of light (MEDIA.md).
   function hero(content) {
-    const el = h('section', { class: 'hero', 'aria-label': 'Account pool' }, h('div', { class: 'hero-inner' }, content));
-    F.glyphField.attach(el, { mask: { icon: 'status' }, place: 'right', fade: 'headline' });
-    return el;
+    const img = h('img', { class: 'hero-media', src: '/dashboard/media-manta.jpg', alt: '', decoding: 'async', 'aria-hidden': 'true' });
+    img.style.setProperty('object-position', '50% 38%');
+    return h('section', { class: 'hero', 'aria-label': 'Account pool' }, img, h('div', { class: 'hero-inner' }, content));
   }
 
   function rowsInWindow(now) {
@@ -162,25 +162,30 @@
     const lat = ok.map(r => r.ms).filter(Number.isFinite).sort((a, b) => a - b);
     const p50 = lat.length ? lat[Math.floor((lat.length - 1) / 2)] : null;
     const errCount = rows.length - ok.length;
+    const last = `last ${st.windowKey}`;
     readouts.replaceChildren(
-      readout(fmt.int(rows.length), 'requests'),
-      readout(`${fmt.compact(tokens)} ≈`, 'tokens'),
-      readout(fmt.int(errCount), errCount === 1 ? 'error' : 'errors', errCount ? 'crit' : null),
-      readout(p50 != null ? fmt.ms(p50) : '—', 'p50 latency, successful'),
+      readout(fmt.int(rows.length), 'requests', null, 'requests', last),
+      readout(`${fmt.compact(tokens)} ≈`, 'tokens', null, 'token', 'estimated'),
+      readout(fmt.int(errCount), errCount === 1 ? 'error' : 'errors', errCount ? 'crit' : null, 'alert', rows.length ? `${fmt.pct(errCount / rows.length)} of requests` : last),
+      readout(p50 != null ? fmt.ms(p50) : '—', 'p50 latency', null, 'latency', 'successful requests'),
     );
     if (partial) readouts.append(h('p', { class: 'meta readouts-note', text: `Covers the last ${meta.capacity} requests, since ${fmt.hm(meta.oldest_ts)}.` }));
     readouts.hidden = F.store.requestsMissing;
 
     // recent errors
     const errRows = rows.filter(r => !r.ok).slice(0, 8);
-    errors.closest('.section').querySelector('.section-title').textContent = errRows.length ? `Recent errors (${rows.length - ok.length})` : 'Recent errors';
+    errors.closest('.section').querySelector('.section-title-text').textContent = errRows.length ? `Recent errors (${rows.length - ok.length})` : 'Recent errors';
     if (F.store.requestsMissing) errors.replaceChildren(h('p', { class: 'meta', text: 'Needs GET /admin/requests.' }));
     else if (!errRows.length) errors.replaceChildren(h('p', { class: 'quiet', text: `No errors in the last ${st.windowKey}.` }));
     else errors.replaceChildren(errorTable(errRows));
   }
 
-  function readout(value, label, tone) {
-    return h('div', { class: 'readout' }, h('p', { class: ['readout-value', tone && `is-${tone}`], text: value }), h('p', { class: 'readout-label', text: label }));
+  // One cell of the readout card: icon and name, the number, and what the number covers.
+  function readout(value, label, tone, icon, hint) {
+    return h('div', { class: 'readout' },
+      h('p', { class: 'readout-label' }, F.icon(icon, 'readout-icon'), h('span', { text: label })),
+      h('p', { class: ['readout-value', tone && `is-${tone}`], text: value }),
+      h('p', { class: 'readout-hint', text: hint }));
   }
 
   function laneTable(accounts, rows) {

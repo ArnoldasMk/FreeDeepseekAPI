@@ -44,19 +44,19 @@
     const appearance = h('div', { class: 'set-group' });
     const chat = h('div', { class: 'set-stack' });
     root.append(h('div', { class: 'view-pad settings' },
-      section('Access key', 'The PROXY_API_KEY this dashboard signs its requests with.', key),
-      section('Connection', 'Point any OpenAI- or Anthropic-compatible client at this proxy.', conn),
-      section('Server', 'Facts from GET /health.', server),
-      section('Updates', 'Stable gets a release once it has been checked. Latest gets every release first.', updates),
-      section('Appearance', null, appearance),
-      section('Chat data', `Stored in this browser only, for ${location.origin}. 127.0.0.1 and localhost keep separate stores.`, chat)));
+      section('Access key', 'The PROXY_API_KEY this dashboard signs its requests with.', key, 'key'),
+      section('Connection', 'Point any OpenAI- or Anthropic-compatible client at this proxy.', conn, 'route'),
+      section('Server', 'Facts from GET /health.', server, 'status'),
+      section('Updates', 'Stable gets a release once it has been checked. Latest gets every release first.', updates, 'download'),
+      section('Appearance', null, appearance, 'settings'),
+      section('Chat data', `Stored in this browser only, for ${location.origin}. 127.0.0.1 and localhost keep separate stores.`, chat, 'chat')));
     Object.assign(st.els, { key, conn, server, updates, appearance, chat });
     F.on('accounts', () => { if (st.visible) renderServer(); });
   }
 
-  function section(title, lead, body) {
+  function section(title, lead, body, icon) {
     return h('section', { class: 'settings-section' },
-      h('header', { class: 'settings-head' }, h('h2', { class: 'settings-title', text: title }), lead ? h('p', { class: 'settings-desc', text: lead }) : null),
+      h('header', { class: 'settings-head' }, h('h2', { class: 'settings-title' }, F.icon(icon, 'title-icon'), h('span', { text: title })), lead ? h('p', { class: 'settings-desc', text: lead }) : null),
       body);
   }
 
@@ -310,26 +310,26 @@
       : s.branch ? [h('span', { text: 'Branch' }), h('code', { class: 'mono-id update-branch', text: s.branch })] : [h('span', { text: 'No channel' })];
     const checkBtn = F.btn(u.phase === 'checking' ? 'Checking…' : 'Check for updates', { kind: 'primary', icon: 'reload', onclick: checkUpdate });
     if (busy || s.method !== 'git') checkBtn.setAttribute('aria-disabled', 'true');
-    // The installed build over the download arrow set in glyphs (glyphfield.js).
+    // The installed build over a humpback breaking the surface (MEDIA.md), the check on its right.
     const hero = h('div', { class: 'update-hero' },
+      h('img', { class: 'update-hero-media', src: '/dashboard/media-breach.jpg', alt: '', decoding: 'async', 'aria-hidden': 'true' }),
       h('div', { class: 'update-hero-body' },
         h('p', { class: 'update-version', text: s.version ? `v${s.version}` : 'Unknown version' }),
         h('p', { class: 'update-where' }, ...where, s.commit ? h('code', { class: 'mono-id', text: s.commit }) : null)),
       s.method === 'git' ? h('div', { class: 'update-hero-action' }, checkBtn) : null);
-    F.glyphField.attach(hero, { mask: { icon: 'download' }, place: 'right', fade: 'headline' });
     if (s.method !== 'git') {
       host.replaceChildren(h('div', { class: 'update-panel' }, hero,
         h('p', { class: 'update-note', text: 'This copy was not installed with git clone (a container image or a downloaded archive), so it cannot update itself. Pull a new image or download the new release.' })));
       return;
     }
-    // Channels as two tiles: what each one gets, the current one marked.
+    // Channels as picker rows: what each one gets, the chosen one checked, the installed one marked.
     const tile = (value, title, desc) => {
       const on = u.channel === value;
       const b = h('button', { type: 'button', class: ['channel-tile', on && 'is-on'], role: 'radio', 'aria-checked': String(on) },
-        h('span', { class: 'channel-dot', 'aria-hidden': 'true' }),
         h('span', { class: 'channel-text' },
           h('span', { class: 'channel-title' }, h('span', { text: title }), s.channel === value ? h('span', { class: 'channel-current', text: 'Current' }) : null),
-          h('span', { class: 'channel-desc', text: desc })));
+          h('span', { class: 'channel-desc', text: desc })),
+        F.icon('check', 'channel-check'));
       b.addEventListener('click', () => { if (busy || u.channel === value) return; u.channel = value; u.check = null; u.phase = 'idle'; u.message = null; renderUpdates(); });
       return b;
     };
