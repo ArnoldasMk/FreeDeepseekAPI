@@ -2322,16 +2322,65 @@ function collectJsonToolCalls(text) {
 }
 
 function collectAgentToolCalls(text, allowedToolNames) {
-    const allowed = allowedToolNames instanceof Set ? allowedToolNames : new Set(allowedToolNames || []);
+    const allowed = allowedToolNames instanceof Set
+        ? allowedToolNames
+        : new Set(allowedToolNames || []);
+
     if (!text || allowed.size === 0) return [];
-    const raw = hasDsmlToolMarkup(text) ? listDsmlToolCalls(text) : collectJsonToolCalls(text);
+
+    const trimmed = String(text).trim();
+    let strictEnvelope = null;
+
+    // Parse complete JSON envelopes before looking for DSML markup.
+    // DSML markers may be literal text inside tool arguments.
+    if (
+        trimmed.startsWith('{') &&
+        trimmed.length <= MAX_TOOL_MARKUP_CHARS
+    ) {
+        const candidate = repairTruncatedJsonEnvelope(trimmed) || trimmed;
+
+        try {
+            const parsed = JSON.parse(candidate);
+
+            if (
+                parsed &&
+                typeof parsed === 'object' &&
+                !Array.isArray(parsed) &&
+                ['tool_call', 'tool_calls', 'function_call'].some(
+                    key => Object.prototype.hasOwnProperty.call(parsed, key)
+                )
+            ) {
+                strictEnvelope = candidate;
+            }
+        } catch (e) {
+            // Invalid JSON is not an executable JSON envelope.
+        }
+    }
+
+    let raw;
+
+    if (strictEnvelope !== null) {
+        // Parse the validated envelope directly.
+        // Never scan its argument strings for legacy TOOL_CALL markers.
+        raw = [];
+        absorbJsonToolPayload(strictEnvelope, raw, new Set());
+    } else {
+        raw = hasDsmlToolMarkup(text)
+            ? listDsmlToolCalls(text)
+            : collectJsonToolCalls(text);
+    }
+
     const calls = [];
     const seen = new Set();
+
     for (const call of raw) {
         if (!call || !allowed.has(call.name)) continue;
+
         rememberToolCall(calls, seen, call);
+
         if (calls.length >= MAX_AGENT_TOOL_CALLS) break;
     }
+
     return calls;
 }
 
