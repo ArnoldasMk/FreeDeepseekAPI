@@ -1493,6 +1493,45 @@ async function readCompletionFailure(resp, account, label) {
     return { errText, retryAfter };
 }
 
+
+// Per-account completion pacing, including internal repair attempts.
+// Run before generating PoW so challenges do not expire while waiting.
+const COMPLETION_PACE_MS = envNumber('DEEPSEEK_MIN_COMPLETION_INTERVAL_MS', 0);
+const completionPaceNext = new Map();
+const completionPaceQueues = new Map();
+
+async function paceDeepSeekCompletion(account) {
+    if (COMPLETION_PACE_MS === 0) return;
+
+    const key = account.id;
+    const prior = completionPaceQueues.get(key) || Promise.resolve();
+
+    const current = prior.catch(() => {}).then(async () => {
+        const remaining = Math.max(
+            0, (completionPaceNext.get(key) || 0) - Date.now()
+        );
+
+        if (remaining > 0) {
+            console.log(
+                `[DS-API] pacer account=${key} waiting ${(remaining / 1000).toFixed(1)}s before completion`
+            );
+            await new Promise(resolve => setTimeout(resolve, remaining));
+        }
+
+        completionPaceNext.set(key, Date.now() + COMPLETION_PACE_MS);
+        console.log(`[DS-API] pacer account=${key} completion slot granted`);
+    });
+
+    completionPaceQueues.set(key, current);
+
+    try {
+        await current;
+    } finally {
+        if (completionPaceQueues.get(key) === current)
+            completionPaceQueues.delete(key);
+    }
+}
+
 async function askDeepSeekStream(prompt, agentId, model = DEFAULT_MODEL_ID, freshSessionPrompt = prompt, lockHolder = null, imageContext = null, webFlags = null) {
     const modelCfg = resolveModelConfig(model);
     const thinking_enabled = webFlags?.thinking_enabled ?? modelCfg.thinking_enabled;
@@ -1539,6 +1578,7 @@ async function askDeepSeekStream(prompt, agentId, model = DEFAULT_MODEL_ID, fres
         console.log(`${agentTag} Uploaded ${imageContext.refFileIds.length} image attachment(s).`);
     }
     const refFileIds = imageContext?.refFileIds || [];
+    await paceDeepSeekCompletion(account);
     const powB64 = await createDeepSeekPowHeader(account, DEEPSEEK_COMPLETION_PATH);
 
     // A chat created by this call holds no message until a completion succeeds.
@@ -1614,6 +1654,7 @@ async function askDeepSeekStream(prompt, agentId, model = DEFAULT_MODEL_ID, fres
                 session.createdAt = Date.now();
                 console.log(`${agentTag} Created new session: ${session.id}`);
 
+                await paceDeepSeekCompletion(account);
                 const newPowB64 = await createDeepSeekPowHeader(account, DEEPSEEK_COMPLETION_PATH);
                 const resp2 = await dsStreamFetch('https://chat.deepseek.com/api/v0/chat/completion', {
                     method: 'POST',
@@ -5289,7 +5330,7 @@ const server = http.createServer(async (req, res) => {
                 console.log(`${agentTag} Response ${apiMode} (tools=${executableCalls.length}, ${Date.now() - startTime}ms, ${fullContent.length} chars)`);
             }
         } catch (e) {
-            console.log('[DS-API] Error:', e.message);
+            console.error('[DS-API] Error:', e);
             if (clientGone && !res.headersSent) {
                 logError(499, 'client_disconnected', `Client disconnected: ${e.message}`);
                 return;
